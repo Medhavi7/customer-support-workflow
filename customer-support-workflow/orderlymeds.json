@@ -1,0 +1,558 @@
+{
+  "name": "Customer Support AI Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "customer-question",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Customer Question Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -4200,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "sheetId",
+              "value": "YOUR_GOOGLE_SHEET_ID_HERE",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "teamEmail",
+              "value": "support-team@yourcompany.com",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "config-node",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3976,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "customerQuestion",
+              "value": "={{ $json.body.question || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "customerEmail",
+              "value": "={{ $json.body.customer_email || $json.body.email || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "customerName",
+              "value": "={{ $json.body.customer_name || $json.body.name || 'Anonymous' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "requestId",
+              "value": "={{ $execution.id }}-{{ $now.toMillis() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "extract-data",
+      "name": "Extract Question Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3752,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.customerQuestion }}",
+              "operator": {
+                "type": "string",
+                "operation": "isEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "validate-input",
+      "name": "Check if Invalid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3528,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": false,\n  \"error\": \"Invalid input\",\n  \"message\": \"Please provide a valid question and email address\"\n} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "validation-error-response",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -3304,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a helpful customer support assistant. A customer has asked the following question:\n\nQuestion: {{ $json.customerQuestion }}\nCustomer Name: {{ $json.customerName }}\nCustomer Email: {{ $json.customerEmail }}\n\nProvide a clear, professional, and helpful answer to their question. Be concise but thorough. If you cannot answer the question with certainty, acknowledge this and suggest next steps.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a professional customer support AI assistant. Always be helpful, polite, and accurate."
+        }
+      },
+      "id": "ai-generate",
+      "name": "Generate Answer with AI",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -3304,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"answer\": \"The detailed answer to the customer's question\",\n\t\"confidence\": \"high\",\n\t\"requiresFollowup\": false,\n\t\"suggestedActions\": []\n}"
+      },
+      "id": "output-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        -3168,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 500
+        }
+      },
+      "id": "groq-model",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -3296,
+        624
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "REPLACE_WITH_YOUR_GROQ_CREDENTIAL_ID",
+          "name": "Groq API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "Timestamp",
+              "value": "={{ $('Extract Question Data').item.json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "Request ID",
+              "value": "={{ $('Extract Question Data').item.json.requestId }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "Customer Name",
+              "value": "={{ $('Extract Question Data').item.json.customerName }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "Customer Email",
+              "value": "={{ $('Extract Question Data').item.json.customerEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "Question",
+              "value": "={{ $('Extract Question Data').item.json.customerQuestion }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "Answer",
+              "value": "={{ $json.error ? 'AI temporarily unavailable - team will respond within 24h' : ($json.output?.answer || $json.answer || 'No answer generated') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "Confidence",
+              "value": "={{ $json.error ? 'error' : ($json.output?.confidence || $json.confidence || 'unknown') }}",
+              "type": "string"
+            },
+            {
+              "id": "id-8",
+              "name": "Requires Followup",
+              "value": "={{ $json.error ? true : ($json.output?.requiresFollowup || $json.requiresFollowup || false) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "id-9",
+              "name": "Status",
+              "value": "={{ $json.error ? 'ai_error' : 'success' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-sheet",
+      "name": "Format for Sheet",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3080,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"requestId\": $json['Request ID'],\n  \"answer\": $json.Answer,\n  \"confidence\": $json.Confidence,\n  \"requiresFollowup\": $json['Requires Followup'],\n  \"timestamp\": $json.Timestamp,\n  \"status\": $json.Status\n} }}",
+        "options": {}
+      },
+      "id": "success-response",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -2856,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Workflow Configuration').item.json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Customer Questions"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "id": "log-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2632,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "sheets-error",
+              "leftValue": "={{ $json.error }}",
+              "operator": {
+                "type": "any",
+                "operation": "exists"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "check-sheets-error",
+      "name": "Check Sheets Error",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2408,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Workflow Configuration').item.json.teamEmail }}",
+        "subject": "=🚨 URGENT: Google Sheets Failed - {{ $('Format for Sheet').item.json['Request ID'] }}",
+        "message": "=<h2 style=\"color: red;\">⚠️ Google Sheets Logging Failed</h2>\n<p><strong>Error:</strong> {{ $json.error?.message || 'Unknown error' }}</p>\n<p><strong>Request ID:</strong> {{ $('Format for Sheet').item.json['Request ID'] }}</p>\n<p><strong>Customer:</strong> {{ $('Format for Sheet').item.json['Customer Name'] }} ({{ $('Format for Sheet').item.json['Customer Email'] }})</p>\n<p><strong>Question:</strong> {{ $('Format for Sheet').item.json.Question }}</p>\n<p><strong>Answer:</strong> {{ $('Format for Sheet').item.json.Answer }}</p>\n<hr>\n<p><em>Please manually log this entry.</em></p>",
+        "options": {}
+      },
+      "id": "alert-sheets-error",
+      "name": "Alert - Sheets Failed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -2184,
+        560
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Workflow Configuration').item.json.teamEmail }}",
+        "subject": "=New Customer Question - {{ $('Format for Sheet').item.json['Customer Name'] }}",
+        "message": "=<h2>{{ $('Format for Sheet').item.json.Status === 'ai_error' ? '⚠️' : '✅' }} Customer Question Processed</h2>\n<p><strong>Request ID:</strong> {{ $('Format for Sheet').item.json['Request ID'] }}</p>\n<p><strong>Status:</strong> {{ $('Format for Sheet').item.json.Status }}</p>\n<p><strong>Customer:</strong> {{ $('Format for Sheet').item.json['Customer Name'] }} ({{ $('Format for Sheet').item.json['Customer Email'] }})</p>\n<p><strong>Question:</strong> {{ $('Format for Sheet').item.json.Question }}</p>\n<p><strong>Answer:</strong> {{ $('Format for Sheet').item.json.Answer }}</p>\n<p><strong>Confidence:</strong> {{ $('Format for Sheet').item.json.Confidence }}</p>\n<p><strong>Requires Follow-up:</strong> {{ $('Format for Sheet').item.json['Requires Followup'] }}</p>\n<hr>\n<p><em>Logged at {{ $('Format for Sheet').item.json.Timestamp }}</em></p>",
+        "options": {}
+      },
+      "id": "notify-team",
+      "name": "Notify Team via Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -2184,
+        240
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Customer Question Webhook": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Extract Question Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Question Data": {
+      "main": [
+        [
+          {
+            "node": "Check if Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Invalid": {
+      "main": [
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Answer with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Answer with AI": {
+      "main": [
+        [
+          {
+            "node": "Format for Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Generate Answer with AI",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Answer with AI",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Sheet": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Success Response": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check Sheets Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sheets Error": {
+      "main": [
+        [
+          {
+            "node": "Alert - Sheets Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Team via Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-22T00:00:00.000Z",
+  "versionId": "1"
+}
